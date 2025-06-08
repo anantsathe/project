@@ -1,0 +1,25 @@
+# Ignore directories
+# Ignore sensitive and large files
+s-anand.net-May-2024
+ga_4_q8_handler.py
+
+downloaded_threads/
+markdown_files/
+__pycache__/
+venv/
+.venv/
+
+
+# Ignore files
+*.pyc
+tds_pages_md/
+
+
+
+.env
+preprocess.py
+*.pyc
+.DS_Storevenv/
+.DS_Store
+*.log
+
