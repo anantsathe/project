@@ -16,13 +16,22 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import traceback
 from dotenv import load_dotenv
+import urllib.request
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Constants
-DB_PATH = "knowledge_base.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "knowledge_base.db")
+DB_URL = "https://drive.google.com/uc?export=download&id=1sBycdd_RyNCL-zi9u2vxg519zAsKuc6e"  # ✅ Cleaned up
+
+if not os.path.exists(DB_PATH):
+    print("Downloading knowledge_base.db...")
+    urllib.request.urlretrieve(DB_URL, DB_PATH)
+    print("Download complete.")
+
 SIMILARITY_THRESHOLD = 0.40  # Lowered threshold for better recall
 MAX_RESULTS = 10  # Increased to get more context
 load_dotenv()
