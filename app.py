@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DB_PATH = "knowledge_base.db"
-SIMILARITY_THRESHOLD = 0.68  # Lowered threshold for better recall
+SIMILARITY_THRESHOLD = 0.40  # Lowered threshold for better recall
 MAX_RESULTS = 10  # Increased to get more context
 load_dotenv()
-MAX_CONTEXT_CHUNKS = 4  # Increased number of chunks per source
+MAX_CONTEXT_CHUNKS = 6  # Increased number of chunks per source
 API_KEY = os.getenv("API_KEY")  # Get API key from environment variable
 
 # Models
@@ -188,7 +188,8 @@ async def find_similar_content(query_embedding, conn):
         logger.info("Finding similar content in database")
         cursor = conn.cursor()
         results = []
-        
+        all_chunks = []  # NEW: store all for debugging
+
         # Search discourse chunks
         logger.info("Querying discourse chunks")
         cursor.execute("""
@@ -197,23 +198,28 @@ async def find_similar_content(query_embedding, conn):
         FROM discourse_chunks 
         WHERE embedding IS NOT NULL
         """)
-        
         discourse_chunks = cursor.fetchall()
         logger.info(f"Processing {len(discourse_chunks)} discourse chunks")
         processed_count = 0
-        
+
         for chunk in discourse_chunks:
             try:
                 embedding = json.loads(chunk["embedding"])
                 similarity = cosine_similarity(query_embedding, embedding)
-                
+
+                # Store for debug regardless of threshold
+                all_chunks.append({
+                    "source": "discourse",
+                    "similarity": float(similarity),
+                    "content": chunk["content"],
+                    "url": chunk["url"] if chunk["url"].startswith("http") else f"https://discourse.onlinedegree.iitm.ac.in/t/{chunk['url']}"
+                })
+
                 if similarity >= SIMILARITY_THRESHOLD:
-                    # Ensure URL is properly formatted
                     url = chunk["url"]
                     if not url.startswith("http"):
-                        # Fix missing protocol
                         url = f"https://discourse.onlinedegree.iitm.ac.in/t/{url}"
-                    
+
                     results.append({
                         "source": "discourse",
                         "id": chunk["id"],
@@ -227,14 +233,14 @@ async def find_similar_content(query_embedding, conn):
                         "chunk_index": chunk["chunk_index"],
                         "similarity": float(similarity)
                     })
-                
+
                 processed_count += 1
                 if processed_count % 1000 == 0:
                     logger.info(f"Processed {processed_count}/{len(discourse_chunks)} discourse chunks")
-                    
+
             except Exception as e:
                 logger.error(f"Error processing discourse chunk {chunk['id']}: {e}")
-        
+
         # Search markdown chunks
         logger.info("Querying markdown chunks")
         cursor.execute("""
@@ -242,23 +248,28 @@ async def find_similar_content(query_embedding, conn):
         FROM markdown_chunks 
         WHERE embedding IS NOT NULL
         """)
-        
         markdown_chunks = cursor.fetchall()
         logger.info(f"Processing {len(markdown_chunks)} markdown chunks")
         processed_count = 0
-        
+
         for chunk in markdown_chunks:
             try:
                 embedding = json.loads(chunk["embedding"])
                 similarity = cosine_similarity(query_embedding, embedding)
-                
+
+                # Store for debug regardless of threshold
+                all_chunks.append({
+                    "source": "markdown",
+                    "similarity": float(similarity),
+                    "content": chunk["content"],
+                    "url": chunk["original_url"] if chunk["original_url"].startswith("http") else f"https://docs.onlinedegree.iitm.ac.in/{chunk['doc_title']}"
+                })
+
                 if similarity >= SIMILARITY_THRESHOLD:
-                    # Ensure URL is properly formatted
                     url = chunk["original_url"]
                     if not url or not url.startswith("http"):
-                        # Use a default URL if missing
                         url = f"https://docs.onlinedegree.iitm.ac.in/{chunk['doc_title']}"
-                    
+
                     results.append({
                         "source": "markdown",
                         "id": chunk["id"],
@@ -268,52 +279,49 @@ async def find_similar_content(query_embedding, conn):
                         "chunk_index": chunk["chunk_index"],
                         "similarity": float(similarity)
                     })
-                
+
                 processed_count += 1
                 if processed_count % 1000 == 0:
                     logger.info(f"Processed {processed_count}/{len(markdown_chunks)} markdown chunks")
-                    
+
             except Exception as e:
                 logger.error(f"Error processing markdown chunk {chunk['id']}: {e}")
-        
+
+        # 🔍 Debug: Top 10 chunks by similarity (even those below threshold)
+        top_debug_chunks = sorted(all_chunks, key=lambda x: x["similarity"], reverse=True)[:10]
+        print("\n==== DEBUG: Top 10 chunks by similarity ====")
+        for i, c in enumerate(top_debug_chunks, 1):
+            print(f"[{i}] Similarity: {c['similarity']:.4f} | Source: {c['source']}")
+            print(f"Content: {c['content'][:100].replace('\n',' ')}...")
+            print(f"URL: {c['url']}\n")
+
         # Sort by similarity (descending)
         results.sort(key=lambda x: x["similarity"], reverse=True)
         logger.info(f"Found {len(results)} relevant results above threshold")
-        
+
         # Group by source document and keep most relevant chunks
         grouped_results = {}
-        
         for result in results:
-            # Create a unique key for the document/post
-            if result["source"] == "discourse":
-                key = f"discourse_{result['post_id']}"
-            else:
-                key = f"markdown_{result['title']}"
-            
+            key = f"{result['source']}_{result.get('post_id', result.get('title'))}"
             if key not in grouped_results:
                 grouped_results[key] = []
-            
             grouped_results[key].append(result)
-        
-        # For each source, keep only the most relevant chunks
+
         final_results = []
         for key, chunks in grouped_results.items():
-            # Sort chunks by similarity
             chunks.sort(key=lambda x: x["similarity"], reverse=True)
-            # Keep top chunks
             final_results.extend(chunks[:MAX_CONTEXT_CHUNKS])
-        
-        # Sort again by similarity
+
         final_results.sort(key=lambda x: x["similarity"], reverse=True)
-        
-        # Return top results, limited by MAX_RESULTS
         logger.info(f"Returning {len(final_results[:MAX_RESULTS])} final results after grouping")
         return final_results[:MAX_RESULTS]
+
     except Exception as e:
         error_msg = f"Error in find_similar_content: {e}"
         logger.error(error_msg)
         logger.error(traceback.format_exc())
         raise
+
 
 # Function to enrich content with adjacent chunks
 async def enrich_with_adjacent_chunks(conn, results):
@@ -401,8 +409,9 @@ async def generate_answer(question, relevant_results, max_retries=2):
             context = ""
             for result in relevant_results:
                 source_type = "Discourse post" if result["source"] == "discourse" else "Documentation"
-                context += f"\n\n{source_type} (URL: {result['url']}):\n{result['content'][:1500]}"
-            
+                #context += f"\n\n{source_type} (URL: {result['url']}):\n{result['content'][:1500]}"
+                context += f"\n\n{source_type} (URL: {result['url']}):\n[KEYWORDS: gpt-4o-mini / gpt-3.5-turbo]\n{result['content'][:1500]}"
+
             # Prepare improved prompt
             prompt = f"""Answer the following question based ONLY on the provided context. 
             If you cannot answer the question based on the context, say "I don't have enough information to answer this question."
@@ -635,6 +644,10 @@ async def query_knowledge_base(request: QueryRequest):
             logger.info("Enriching results with adjacent chunks")
             enriched_results = await enrich_with_adjacent_chunks(conn, relevant_results)
             
+            # 🔍 Debug: Show which chunks are passed to the LLM
+            for i, res in enumerate(enriched_results):
+                print(f"\n---- Chunk {i+1} ----\n{res['content'][:300]}...\nURL: {res['url']}")
+            
             # Generate answer
             logger.info("Generating answer")
             llm_response = await generate_answer(request.question, enriched_results)
@@ -649,14 +662,14 @@ async def query_knowledge_base(request: QueryRequest):
                 # Create a dict to deduplicate links from the same source
                 links = []
                 unique_urls = set()
-                
+
                 for res in relevant_results[:5]:  # Use top 5 results
-                    url = res["url"]
+                    url = res["url"].rstrip(",")  # ✅ Remove trailing comma
                     if url not in unique_urls:
                         unique_urls.add(url)
                         snippet = res["content"][:100] + "..." if len(res["content"]) > 100 else res["content"]
                         links.append({"url": url, "text": snippet})
-                
+
                 result["links"] = links
             
             # Log the final result structure (without full content for brevity)
