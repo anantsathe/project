@@ -13,14 +13,12 @@ venv/
 # Ignore files
 *.pyc
 tds_pages_md/
-knowledge_base.db
-
-
+api/knowledge_base.db
 .env
-preprocess.py
 *.pyc
 .DS_Storevenv/
 .DS_Store
 *.log
 *.zip
 
+.vercel
