@@ -1,5 +1,6 @@
 # app.py
 import os
+import subprocess
 import json
 import sqlite3
 import numpy as np
@@ -23,12 +24,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Constants
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "knowledge_base.db")
-DB_URL = "https://drive.google.com/uc?export=download&id=1sBycdd_RyNCL-zi9u2vxg519zAsKuc6e"  # ✅ Cleaned up
+#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#DB_PATH = os.path.join(BASE_DIR, "knowledge_base.db")
+# Use /tmp directory on Vercel, which is writable
+DB_URL = "https://www.dropbox.com/scl/fi/1k1mnzdoqrpb5sh3sjpqw/knowledge_base.db?rlkey=v4ir7jkkswcmq548ouwbogj0z&st=0g1puqvz&dl=1"
+DB_PATH = "/tmp/knowledge_base.db"
+#DB_URL = "https://drive.google.com/uc?export=download&id=1sBycdd_RyNCL-zi9u2vxg519zAsKuc6e"  # ✅ Cleaned up
 
 if not os.path.exists(DB_PATH):
-    print("Downloading knowledge_base.db...")
+    print("Downloading knowledge_base.db from Dropbox...")
     urllib.request.urlretrieve(DB_URL, DB_PATH)
     print("Download complete.")
 
