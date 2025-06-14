@@ -2,7 +2,7 @@
 
 This project is a virtual Teaching Assistant (TA) that intelligently answers student questions for the **Tools in Data Science (TDS) Jan 2025** course from the IIT Madras Online B.Sc. in Data Science program.
 
-🔗 **Live API Endpoint**: [https://project-fcs4-pmr8aqs7h-anant-sathes-projects.vercel.app/query](https://project-fcs4-pmr8aqs7h-anant-sathes-projects.vercel.app/query)  
+🔗 **Live API Endpoint**: [https://project-fcs4-pmr8aqs7h-anant-sathes-projects.vercel.app/query](https://project-fcs4-dxltsvmc1-anant-sathes-projects.vercel.app/query)  
 📁 **GitHub Repo**: [https://github.com/anantsathe/project](https://github.com/anantsathe/project)
 
 ---
